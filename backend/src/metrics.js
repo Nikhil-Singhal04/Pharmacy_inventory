@@ -18,3 +18,4 @@ export const httpRequestDurationMicroseconds = new client.Histogram({
 });
 
 register.registerMetric(httpRequestDurationMicroseconds);
+
