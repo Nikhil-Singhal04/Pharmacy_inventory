@@ -44,7 +44,7 @@ export const withTransaction = async (callback) => {
 export const checkHealth = async () => {
   const client = await pool.connect();
   try {
-    await client.query('SELECT 1');
+    await client.query({ text: 'SELECT 1', timeout: 2000 });
     return true;
   } finally {
     client.release();

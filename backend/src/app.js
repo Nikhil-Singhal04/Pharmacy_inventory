@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { httpLogger } from './logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { healthRouter } from './routes/health.js';
+import { httpRequestDurationMicroseconds } from './metrics.js';
 import { medicinesRouter } from './routes/medicines.js';
 import { batchesRouter } from './routes/batches.js';
 import { stockMovementsRouter } from './routes/stockMovements.js';
@@ -39,6 +40,24 @@ export const createApp = () => {
 
   // Structured HTTP access logging
   app.use(httpLogger);
+
+  // Prometheus request duration metric tracking
+  app.use((req, res, next) => {
+    const start = process.hrtime();
+    res.on('finish', () => {
+      const diff = process.hrtime(start);
+      const durationSeconds = diff[0] + diff[1] / 1e9;
+      httpRequestDurationMicroseconds.observe(
+        {
+          method: req.method,
+          route: req.baseUrl ? `${req.baseUrl}${req.path}` : req.path,
+          status_code: res.statusCode
+        },
+        durationSeconds
+      );
+    });
+    next();
+  });
 
   // Health and Readiness checks (mounted at root)
   app.use('/', healthRouter);

@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { checkHealth } from '../db.js';
+import { register } from '../metrics.js';
+import { logger } from '../logger.js';
 
 export const healthRouter = Router();
 
@@ -28,6 +30,7 @@ healthRouter.get('/ready', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (err) {
+    logger.error({ err }, 'Readiness probe failed: unable to connect to database');
     res.status(503).json({
       status: 'not_ready',
       database: 'disconnected',
@@ -37,3 +40,15 @@ healthRouter.get('/ready', async (req, res) => {
   }
 });
 
+/**
+ * Prometheus metrics endpoint: /metrics
+ * Returns Prometheus-formatted text metrics for scraping
+ */
+healthRouter.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } catch (err) {
+    res.status(500).end(err.message);
+  }
+});
