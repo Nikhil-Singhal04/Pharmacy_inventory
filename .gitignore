@@ -1,0 +1,30 @@
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+deploy/secrets/*
+!deploy/secrets/.gitkeep
+!deploy/secrets/*.example
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+
+# Backups and database dumps
+backups/
+*.dump
+*.sql
+
+# Logs and test artifacts
+*.log
+npm-debug.log*
+coverage/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

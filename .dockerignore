@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.*
+deploy/secrets/*
+!deploy/secrets/*.example
+backups/
+dist/
+build/
+coverage/
+docs/
