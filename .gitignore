@@ -28,3 +28,7 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+
+# md files
+phases.md
+PROJECT_PHASES.md

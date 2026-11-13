@@ -54,3 +54,4 @@ reportsRouter.get('/stock-summary', async (req, res, next) => {
     next(err);
   }
 });
+

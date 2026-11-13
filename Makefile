@@ -49,3 +49,4 @@ restore: ## Run restore script
 
 smoke: ## Run smoke tests
 	bash scripts/smoke-test.sh
+

@@ -99,3 +99,4 @@ exports.down = (pgm) => {
   pgm.dropTable('batches');
   pgm.dropTable('medicines');
 };
+

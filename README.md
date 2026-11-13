@@ -7,3 +7,4 @@ Refer to individual phase documentation and `PROJECT_PHASES.md`.
 
 ## Makefile Commands
 Run `make help` to see available commands.
+

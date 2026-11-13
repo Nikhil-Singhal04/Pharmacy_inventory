@@ -52,3 +52,4 @@ export const checkHealth = async () => {
 };
 
 export const close = () => pool.end();
+

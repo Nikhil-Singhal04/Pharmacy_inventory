@@ -74,3 +74,4 @@ medicinesRouter.post('/', async (req, res, next) => {
     next(err);
   }
 });
+
