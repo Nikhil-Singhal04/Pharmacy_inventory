@@ -1,0 +1,35 @@
+:80 {
+    root * /srv
+    encode gzip zstd
+    file_server
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Proxy API and Observability endpoints to backend
+    handle /api/* {
+        reverse_proxy {$API_HOST:api}:{$API_PORT:3000}
+    }
+
+    handle /health {
+        reverse_proxy {$API_HOST:api}:{$API_PORT:3000}
+    }
+
+    handle /ready {
+        reverse_proxy {$API_HOST:api}:{$API_PORT:3000}
+    }
+
+    handle /metrics {
+        reverse_proxy {$API_HOST:api}:{$API_PORT:3000}
+    }
+
+    # SPA routing fallback
+    handle {
+        try_files {path} /index.html
+    }
+}
