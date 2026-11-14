@@ -1,17 +1,27 @@
-:80 {
+# Caddyfile — Reverse Proxy and Static File Server with Internal HTTPS
+{
+    # Enable internal certificate authority for local development / testing
+    local_certs
+}
+
+# Main site block for HTTPS
+localhost, :443 {
+    tls internal
+
     root * /srv
     encode gzip zstd
     file_server
 
-    # Security headers
+    # Production-ready Security Headers
     header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options nosniff
         X-Frame-Options DENY
         Referrer-Policy strict-origin-when-cross-origin
         -Server
     }
 
-    # Proxy API and Observability endpoints to backend
+    # Reverse proxy API and Observability endpoints to backend service
     handle /api/* {
         reverse_proxy {$API_HOST:api}:{$API_PORT:3000}
     }
@@ -28,8 +38,13 @@
         reverse_proxy {$API_HOST:api}:{$API_PORT:3000}
     }
 
-    # SPA routing fallback
+    # SPA routing fallback for client-side navigation
     handle {
         try_files {path} /index.html
     }
+}
+
+# HTTP block: automatically redirects to HTTPS (or serves plain HTTP if queried directly)
+:80 {
+    redir https://{host}{uri} permanent
 }

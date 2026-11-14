@@ -37,10 +37,13 @@ RUN apk add --no-cache curl
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./
 
-# Copy application source code, migrations, and seeds
+# Copy application source code, migrations, seeds, and entrypoint
 COPY --chown=node:node src/ ./src/
 COPY --chown=node:node migrations/ ./migrations/
 COPY --chown=node:node seeds/ ./seeds/
+COPY --chown=node:node docker-entrypoint.sh ./
+
+RUN chmod +x docker-entrypoint.sh
 
 # INTERVIEW NOTE ON SECURITY:
 # Never run containers as root (UID 0). Running as 'node' (UID 1000) prevents
@@ -53,4 +56,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "src/server.js"]
