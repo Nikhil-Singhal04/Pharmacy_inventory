@@ -1168,12 +1168,13 @@ export default function App() {
                       </td>
                       <td>
                         <span
-                          className={`badge ${m.type === "SALE"
+                          className={`badge ${
+                            m.type === "SALE"
                               ? "danger"
                               : m.type === "PURCHASE"
                                 ? "active"
                                 : "low"
-                            }`}
+                          }`}
                         >
                           {m.type}
                         </span>
