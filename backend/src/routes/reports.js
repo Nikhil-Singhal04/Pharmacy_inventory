@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { query } from '../db.js';
+import { Router } from "express";
+import { query } from "../db.js";
 
 export const reportsRouter = Router();
 
@@ -7,7 +7,7 @@ export const reportsRouter = Router();
  * GET /api/reports/stock-summary
  * Aggregates medicine inventory metrics, highlighting active stock, expired stock, and low stock
  */
-reportsRouter.get('/stock-summary', async (req, res, next) => {
+reportsRouter.get("/stock-summary", async (req, res, next) => {
   try {
     const result = await query(`
       SELECT 
@@ -34,7 +34,7 @@ reportsRouter.get('/stock-summary', async (req, res, next) => {
         activeStock: acc.activeStock + row.active_quantity,
         expiredStock: acc.expiredStock + row.expired_quantity,
         expiredBatches: acc.expiredBatches + row.expired_batches,
-        lowStockBatches: acc.lowStockBatches + row.low_stock_batches
+        lowStockBatches: acc.lowStockBatches + row.low_stock_batches,
       }),
       {
         totalMedicines: 0,
@@ -42,16 +42,15 @@ reportsRouter.get('/stock-summary', async (req, res, next) => {
         activeStock: 0,
         expiredStock: 0,
         expiredBatches: 0,
-        lowStockBatches: 0
-      }
+        lowStockBatches: 0,
+      },
     );
 
     res.status(200).json({
       summary: totals,
-      medicines: result.rows
+      medicines: result.rows,
     });
   } catch (err) {
     next(err);
   }
 });
-

@@ -11,7 +11,9 @@
     "migrate:down": "node-pg-migrate down --envPath .env",
     "seed": "node seeds/seed.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit",
-    "lint": "eslint src/ --ext .js"
+    "lint": "eslint .",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\"",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\""
   },
   "dependencies": {
     "cors": "2.8.5",

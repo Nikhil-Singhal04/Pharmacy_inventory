@@ -1,15 +1,15 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import { httpLogger } from './logger.js';
-import { errorHandler } from './middleware/errorHandler.js';
-import { healthRouter } from './routes/health.js';
-import { httpRequestDurationMicroseconds } from './metrics.js';
-import { medicinesRouter } from './routes/medicines.js';
-import { batchesRouter } from './routes/batches.js';
-import { stockMovementsRouter } from './routes/stockMovements.js';
-import { reportsRouter } from './routes/reports.js';
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import { httpLogger } from "./logger.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { healthRouter } from "./routes/health.js";
+import { httpRequestDurationMicroseconds } from "./metrics.js";
+import { medicinesRouter } from "./routes/medicines.js";
+import { batchesRouter } from "./routes/batches.js";
+import { stockMovementsRouter } from "./routes/stockMovements.js";
+import { reportsRouter } from "./routes/reports.js";
 
 export const createApp = () => {
   const app = express();
@@ -28,12 +28,12 @@ export const createApp = () => {
     legacyHeaders: false,
     message: {
       error: {
-        message: 'Too many requests, please try again later.',
-        code: 'RATE_LIMIT_EXCEEDED'
-      }
-    }
+        message: "Too many requests, please try again later.",
+        code: "RATE_LIMIT_EXCEEDED",
+      },
+    },
   });
-  app.use('/api', limiter);
+  app.use("/api", limiter);
 
   // Body parser
   app.use(express.json());
@@ -44,37 +44,37 @@ export const createApp = () => {
   // Prometheus request duration metric tracking
   app.use((req, res, next) => {
     const start = process.hrtime();
-    res.on('finish', () => {
+    res.on("finish", () => {
       const diff = process.hrtime(start);
       const durationSeconds = diff[0] + diff[1] / 1e9;
       httpRequestDurationMicroseconds.observe(
         {
           method: req.method,
           route: req.baseUrl ? `${req.baseUrl}${req.path}` : req.path,
-          status_code: res.statusCode
+          status_code: res.statusCode,
         },
-        durationSeconds
+        durationSeconds,
       );
     });
     next();
   });
 
   // Health and Readiness checks (mounted at root)
-  app.use('/', healthRouter);
+  app.use("/", healthRouter);
 
   // API Domain routes
-  app.use('/api/medicines', medicinesRouter);
-  app.use('/api/batches', batchesRouter);
-  app.use('/api/stock-movements', stockMovementsRouter);
-  app.use('/api/reports', reportsRouter);
+  app.use("/api/medicines", medicinesRouter);
+  app.use("/api/batches", batchesRouter);
+  app.use("/api/stock-movements", stockMovementsRouter);
+  app.use("/api/reports", reportsRouter);
 
   // 404 Handler
   app.use((req, res) => {
     res.status(404).json({
       error: {
         message: `Route ${req.method} ${req.originalUrl} not found`,
-        code: 'NOT_FOUND'
-      }
+        code: "NOT_FOUND",
+      },
     });
   });
 
@@ -83,4 +83,3 @@ export const createApp = () => {
 
   return app;
 };
-

@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { query, withTransaction } from '../db.js';
+import { Router } from "express";
+import { query, withTransaction } from "../db.js";
 
 export const stockMovementsRouter = Router();
 
@@ -7,7 +7,7 @@ export const stockMovementsRouter = Router();
  * GET /api/stock-movements
  * Returns stock movement history, optionally filtered by batch_id
  */
-stockMovementsRouter.get('/', async (req, res, next) => {
+stockMovementsRouter.get("/", async (req, res, next) => {
   try {
     const { batch_id } = req.query;
     let sql = `
@@ -29,11 +29,11 @@ stockMovementsRouter.get('/', async (req, res, next) => {
     const params = [];
 
     if (batch_id) {
-      sql += ' WHERE sm.batch_id = $1';
+      sql += " WHERE sm.batch_id = $1";
       params.push(batch_id);
     }
 
-    sql += ' ORDER BY sm.created_at DESC, sm.id DESC;';
+    sql += " ORDER BY sm.created_at DESC, sm.id DESC;";
 
     const result = await query(sql, params);
     res.status(200).json({ data: result.rows });
@@ -51,24 +51,24 @@ stockMovementsRouter.get('/', async (req, res, next) => {
  *   3. Reject SALE with insufficient quantity
  *   4. Use SELECT ... FOR UPDATE (row lock) to prevent race conditions during concurrent sales
  */
-stockMovementsRouter.post('/', async (req, res, next) => {
+stockMovementsRouter.post("/", async (req, res, next) => {
   try {
     const { batch_id, type, quantity, reason, reference } = req.body;
 
     // 1. Validate inputs
     if (!batch_id || isNaN(parseInt(batch_id, 10))) {
       return res.status(400).json({
-        error: { message: 'Valid batch_id is required', code: 'INVALID_INPUT' }
+        error: { message: "Valid batch_id is required", code: "INVALID_INPUT" },
       });
     }
 
-    const validTypes = ['PURCHASE', 'SALE', 'RETURN', 'ADJUSTMENT'];
+    const validTypes = ["PURCHASE", "SALE", "RETURN", "ADJUSTMENT"];
     if (!type || !validTypes.includes(type.toUpperCase())) {
       return res.status(400).json({
         error: {
-          message: `Movement type must be one of: ${validTypes.join(', ')}`,
-          code: 'INVALID_TYPE'
-        }
+          message: `Movement type must be one of: ${validTypes.join(", ")}`,
+          code: "INVALID_TYPE",
+        },
       });
     }
 
@@ -76,7 +76,10 @@ stockMovementsRouter.post('/', async (req, res, next) => {
     // Strict business rule: reject negative or zero quantities
     if (isNaN(qty) || qty <= 0) {
       return res.status(400).json({
-        error: { message: 'Quantity must be a positive integer greater than zero', code: 'INVALID_QUANTITY' }
+        error: {
+          message: "Quantity must be a positive integer greater than zero",
+          code: "INVALID_QUANTITY",
+        },
       });
     }
 
@@ -94,13 +97,13 @@ stockMovementsRouter.post('/', async (req, res, next) => {
          FROM batches
          WHERE id = $1
          FOR UPDATE`,
-        [batch_id]
+        [batch_id],
       );
 
       if (batchRes.rowCount === 0) {
         const error = new Error(`Batch ID ${batch_id} not found`);
         error.statusCode = 404;
-        error.code = 'NOT_FOUND';
+        error.code = "NOT_FOUND";
         throw error;
       }
 
@@ -108,32 +111,38 @@ stockMovementsRouter.post('/', async (req, res, next) => {
 
       let newQuantity = batch.quantity_on_hand;
 
-      if (movementType === 'SALE') {
+      if (movementType === "SALE") {
         // Business Rule: Reject sales from expired batches
         if (batch.is_expired) {
-          const error = new Error(`Cannot sell from expired batch ${batch.batch_no} (expired on ${batch.expiry_date.toISOString().slice(0, 10)})`);
+          const error = new Error(
+            `Cannot sell from expired batch ${batch.batch_no} (expired on ${batch.expiry_date.toISOString().slice(0, 10)})`,
+          );
           error.statusCode = 400;
-          error.code = 'BATCH_EXPIRED';
+          error.code = "BATCH_EXPIRED";
           throw error;
         }
 
         // Business Rule: Reject sales with insufficient quantity
         if (batch.quantity_on_hand < qty) {
-          const error = new Error(`Insufficient stock in batch ${batch.batch_no}. Requested: ${qty}, available: ${batch.quantity_on_hand}`);
+          const error = new Error(
+            `Insufficient stock in batch ${batch.batch_no}. Requested: ${qty}, available: ${batch.quantity_on_hand}`,
+          );
           error.statusCode = 400;
-          error.code = 'INSUFFICIENT_STOCK';
+          error.code = "INSUFFICIENT_STOCK";
           throw error;
         }
 
         newQuantity -= qty;
-      } else if (movementType === 'PURCHASE' || movementType === 'RETURN') {
+      } else if (movementType === "PURCHASE" || movementType === "RETURN") {
         newQuantity += qty;
-      } else if (movementType === 'ADJUSTMENT') {
+      } else if (movementType === "ADJUSTMENT") {
         // For ADJUSTMENT, reason is mandatory
-        if (!reason || reason.trim() === '') {
-          const error = new Error('Reason is required for inventory adjustments');
+        if (!reason || reason.trim() === "") {
+          const error = new Error(
+            "Reason is required for inventory adjustments",
+          );
           error.statusCode = 400;
-          error.code = 'REASON_REQUIRED';
+          error.code = "REASON_REQUIRED";
           throw error;
         }
         // Adjustment applies delta or check; let's treat quantity as delta based on reference/direction or if negative is prohibited
@@ -143,8 +152,8 @@ stockMovementsRouter.post('/', async (req, res, next) => {
 
       // Update batch quantity
       await client.query(
-        'UPDATE batches SET quantity_on_hand = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [newQuantity, batch.id]
+        "UPDATE batches SET quantity_on_hand = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        [newQuantity, batch.id],
       );
 
       // Record auditable stock movement
@@ -152,7 +161,13 @@ stockMovementsRouter.post('/', async (req, res, next) => {
         `INSERT INTO stock_movements (batch_id, type, quantity, reason, reference)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, batch_id, type, quantity, reason, reference, created_at`,
-        [batch.id, movementType, qty, reason?.trim() || null, reference?.trim() || null]
+        [
+          batch.id,
+          movementType,
+          qty,
+          reason?.trim() || null,
+          reference?.trim() || null,
+        ],
       );
 
       return {
@@ -161,8 +176,8 @@ stockMovementsRouter.post('/', async (req, res, next) => {
           id: batch.id,
           batch_no: batch.batch_no,
           previous_quantity: batch.quantity_on_hand,
-          new_quantity: newQuantity
-        }
+          new_quantity: newQuantity,
+        },
       };
     });
 
@@ -171,4 +186,3 @@ stockMovementsRouter.post('/', async (req, res, next) => {
     next(err);
   }
 });
-

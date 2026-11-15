@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { query } from '../db.js';
+import { Router } from "express";
+import { query } from "../db.js";
 
 export const medicinesRouter = Router();
 
@@ -7,7 +7,7 @@ export const medicinesRouter = Router();
  * GET /api/medicines
  * Lists all medicines with total on-hand quantity and active batch count
  */
-medicinesRouter.get('/', async (req, res, next) => {
+medicinesRouter.get("/", async (req, res, next) => {
   try {
     const result = await query(`
       SELECT 
@@ -36,29 +36,34 @@ medicinesRouter.get('/', async (req, res, next) => {
  * POST /api/medicines
  * Creates a new medicine. Enforces unique SKU and required name.
  */
-medicinesRouter.post('/', async (req, res, next) => {
+medicinesRouter.post("/", async (req, res, next) => {
   try {
     const { name, sku, description } = req.body;
 
-    if (!name || typeof name !== 'string' || name.trim() === '') {
+    if (!name || typeof name !== "string" || name.trim() === "") {
       return res.status(400).json({
-        error: { message: 'Medicine name is required', code: 'INVALID_INPUT' }
+        error: { message: "Medicine name is required", code: "INVALID_INPUT" },
       });
     }
 
-    if (!sku || typeof sku !== 'string' || sku.trim() === '') {
+    if (!sku || typeof sku !== "string" || sku.trim() === "") {
       return res.status(400).json({
-        error: { message: 'Medicine SKU is required', code: 'INVALID_INPUT' }
+        error: { message: "Medicine SKU is required", code: "INVALID_INPUT" },
       });
     }
 
     const cleanSku = sku.trim().toUpperCase();
 
     // Check SKU uniqueness
-    const existing = await query('SELECT id FROM medicines WHERE sku = $1', [cleanSku]);
+    const existing = await query("SELECT id FROM medicines WHERE sku = $1", [
+      cleanSku,
+    ]);
     if (existing.rowCount > 0) {
       return res.status(409).json({
-        error: { message: `Medicine with SKU '${cleanSku}' already exists`, code: 'DUPLICATE_SKU' }
+        error: {
+          message: `Medicine with SKU '${cleanSku}' already exists`,
+          code: "DUPLICATE_SKU",
+        },
       });
     }
 
@@ -66,7 +71,7 @@ medicinesRouter.post('/', async (req, res, next) => {
       `INSERT INTO medicines (name, sku, description)
        VALUES ($1, $2, $3)
        RETURNING id, name, sku, description, created_at`,
-      [name.trim(), cleanSku, description?.trim() || null]
+      [name.trim(), cleanSku, description?.trim() || null],
     );
 
     res.status(201).json({ data: result.rows[0] });
@@ -74,4 +79,3 @@ medicinesRouter.post('/', async (req, res, next) => {
     next(err);
   }
 });
-
