@@ -194,8 +194,9 @@ jobs:
 
       # Run Trivy vulnerability scanner on API image
       - name: Run Trivy vulnerability scan on API
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          scan-type: 'image'
           image-ref: 'pharmacy-api:scan'
           format: 'table'
           exit-code: '0'
@@ -211,8 +212,9 @@ jobs:
 
       # Run Trivy vulnerability scanner on Web image
       - name: Run Trivy vulnerability scan on Web
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
+          scan-type: 'image'
           image-ref: 'pharmacy-web:scan'
           format: 'table'
           exit-code: '0'
@@ -245,15 +247,20 @@ jobs:
 
       - name: Output image digests and published tags
         if: github.event_name != 'pull_request'
+        env:
+          API_TAGS: ${{ steps.meta-api.outputs.tags }}
+          API_DIGEST: ${{ steps.push-api.outputs.digest }}
+          WEB_TAGS: ${{ steps.meta-web.outputs.tags }}
+          WEB_DIGEST: ${{ steps.push-web.outputs.digest }}
         run: |
           echo "=========================================================="
           echo "GHCR Deployment Summary"
           echo "=========================================================="
           echo "API Image: ghcr.io/${{ env.REPO_LOWER }}/pharmacy-api"
-          echo "API Tags: ${{ steps.meta-api.outputs.tags }}"
-          echo "API Digest: ${{ steps.push-api.outputs.digest }}"
+          echo "API Tags: ${API_TAGS}"
+          echo "API Digest: ${API_DIGEST}"
           echo "----------------------------------------------------------"
           echo "Web Image: ghcr.io/${{ env.REPO_LOWER }}/pharmacy-web"
-          echo "Web Tags: ${{ steps.meta-web.outputs.tags }}"
-          echo "Web Digest: ${{ steps.push-web.outputs.digest }}"
+          echo "Web Tags: ${WEB_TAGS}"
+          echo "Web Digest: ${WEB_DIGEST}"
           echo "=========================================================="
