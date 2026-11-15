@@ -37,7 +37,7 @@ services:
       args:
         APP_VERSION: 1.0.0
         GIT_SHA: compose
-    image: pharmacy-api:latest
+    image: ${API_IMAGE:-pharmacy-api:${IMAGE_TAG:-latest}}
     container_name: pharmacy_api
     restart: unless-stopped
     security_opt:
@@ -75,7 +75,7 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
-    image: pharmacy-web:latest
+    image: ${WEB_IMAGE:-pharmacy-web:${IMAGE_TAG:-latest}}
     container_name: pharmacy_web
     restart: unless-stopped
     security_opt:
