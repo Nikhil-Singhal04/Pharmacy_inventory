@@ -1,4 +1,4 @@
-﻿# ====================================================================
+# ====================================================================
 # Pharmacy Inventory System — Clean Clone Verification Script
 # Validates Acceptance A2: Reproducibility from a fresh git clone
 # ====================================================================

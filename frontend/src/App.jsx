@@ -3,12 +3,16 @@ import React, { useState, useEffect } from "react";
 export default function App() {
   const [tab, setTab] = useState("summary");
   const [apiReady, setApiReady] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Data states
   const [medicines, setMedicines] = useState([]);
   const [batches, setBatches] = useState([]);
   const [movements, setMovements] = useState([]);
   const [summary, setSummary] = useState(null);
+
+  // Search & Filter states
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Form states
   const [medForm, setMedForm] = useState({
@@ -31,62 +35,80 @@ export default function App() {
   });
 
   // Notifications
-  const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+  const [alert, setAlert] = useState(null); // { type: 'error' | 'success', title: '', desc: '' }
 
   // Initial check and load
   useEffect(() => {
+    checkHealth();
+    refreshAll();
+  }, []);
+
+  const checkHealth = () => {
     fetch("/ready")
       .then((res) => res.json())
       .then((data) => setApiReady(data.status === "ready"))
       .catch(() => setApiReady(false));
-    refreshAll();
-  }, []);
-
-  const refreshAll = () => {
-    fetchMedicines();
-    fetchBatches();
-    fetchMovements();
-    fetchSummary();
   };
 
-  const fetchMedicines = () => {
-    fetch("/api/medicines")
-      .then((res) => res.json())
-      .then((d) => setMedicines(d.data || []))
-      .catch(() => {});
+  const refreshAll = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      fetchMedicines(),
+      fetchBatches(),
+      fetchMovements(),
+      fetchSummary(),
+    ]);
+    setTimeout(() => setIsRefreshing(false), 300);
   };
 
-  const fetchBatches = () => {
-    fetch("/api/batches")
-      .then((res) => res.json())
-      .then((d) => setBatches(d.data || []))
-      .catch(() => {});
+  const fetchMedicines = async () => {
+    try {
+      const res = await fetch("/api/medicines");
+      const d = await res.json();
+      setMedicines(d.data || []);
+    } catch {
+      // ignore
+    }
   };
 
-  const fetchMovements = () => {
-    fetch("/api/stock-movements")
-      .then((res) => res.json())
-      .then((d) => setMovements(d.data || []))
-      .catch(() => {});
+  const fetchBatches = async () => {
+    try {
+      const res = await fetch("/api/batches");
+      const d = await res.json();
+      setBatches(d.data || []);
+    } catch {
+      // ignore
+    }
   };
 
-  const fetchSummary = () => {
-    fetch("/api/reports/stock-summary")
-      .then((res) => res.json())
-      .then((d) => setSummary(d))
-      .catch(() => {});
+  const fetchMovements = async () => {
+    try {
+      const res = await fetch("/api/stock-movements");
+      const d = await res.json();
+      setMovements(d.data || []);
+    } catch {
+      // ignore
+    }
   };
 
-  const clearAlerts = () => {
-    setErrorMsg("");
-    setSuccessMsg("");
+  const fetchSummary = async () => {
+    try {
+      const res = await fetch("/api/reports/stock-summary");
+      const d = await res.json();
+      setSummary(d);
+    } catch {
+      // ignore
+    }
+  };
+
+  const clearAlert = () => {
+    setAlert(null);
   };
 
   // Submit Medicine
   const handleCreateMedicine = async (e) => {
     e.preventDefault();
-    clearAlerts();
+    clearAlert();
     try {
       const res = await fetch("/api/medicines", {
         method: "POST",
@@ -94,23 +116,30 @@ export default function App() {
         body: JSON.stringify(medForm),
       });
       const data = await res.json();
-      if (!res.ok)
+      if (!res.ok) {
         throw new Error(data.error?.message || "Failed to create medicine");
-      setSuccessMsg(
-        `Medicine '${data.data.name}' created with SKU ${data.data.sku}`,
-      );
+      }
+      setAlert({
+        type: "success",
+        title: "Medicine Registered Successfully",
+        desc: `Created medicine '${data.data.name}' with SKU ${data.data.sku}`,
+      });
       setMedForm({ name: "", sku: "", description: "" });
       fetchMedicines();
       fetchSummary();
     } catch (err) {
-      setErrorMsg(err.message);
+      setAlert({
+        type: "error",
+        title: "Registration Failed",
+        desc: err.message,
+      });
     }
   };
 
   // Submit Batch
   const handleCreateBatch = async (e) => {
     e.preventDefault();
-    clearAlerts();
+    clearAlert();
     try {
       const res = await fetch("/api/batches", {
         method: "POST",
@@ -118,9 +147,14 @@ export default function App() {
         body: JSON.stringify(batchForm),
       });
       const data = await res.json();
-      if (!res.ok)
+      if (!res.ok) {
         throw new Error(data.error?.message || "Failed to create batch");
-      setSuccessMsg(`Batch '${data.data.batch_no}' created successfully`);
+      }
+      setAlert({
+        type: "success",
+        title: "Batch Created Successfully",
+        desc: `Batch '${data.data.batch_no}' was provisioned with ${data.data.quantity_on_hand} initial units.`,
+      });
       setBatchForm({
         medicine_id: "",
         batch_no: "",
@@ -131,14 +165,18 @@ export default function App() {
       fetchMedicines();
       fetchSummary();
     } catch (err) {
-      setErrorMsg(err.message);
+      setAlert({
+        type: "error",
+        title: "Batch Creation Failed",
+        desc: err.message,
+      });
     }
   };
 
   // Submit Movement (SALE, PURCHASE, etc.)
   const handleRecordMovement = async (e) => {
     e.preventDefault();
-    clearAlerts();
+    clearAlert();
     try {
       const res = await fetch("/api/stock-movements", {
         method: "POST",
@@ -146,179 +184,435 @@ export default function App() {
         body: JSON.stringify(moveForm),
       });
       const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.error?.message || "Transaction rejected");
-      setSuccessMsg(
-        `Recorded ${data.data.movement.type} of ${data.data.movement.quantity} units on batch ${data.data.batch.batch_no}. New Stock: ${data.data.batch.new_quantity}`,
-      );
+      if (!res.ok) {
+        const errCode = data.error?.code;
+        const errMsg = data.error?.message || "Transaction rejected";
+        if (errCode === "BATCH_EXPIRED") {
+          throw new Error(
+            `CLINICAL SAFETY RULE VIOLATION (BATCH_EXPIRED): ${errMsg}. Stock was left strictly unchanged.`,
+          );
+        } else if (errCode === "INSUFFICIENT_STOCK") {
+          throw new Error(
+            `INVENTORY LIMIT REACHED (INSUFFICIENT_STOCK): ${errMsg}. Stock was left strictly unchanged.`,
+          );
+        }
+        throw new Error(errMsg);
+      }
+      setAlert({
+        type: "success",
+        title: "Transaction Committed Successfully",
+        desc: `Recorded ${data.data.movement.type} of ${data.data.movement.quantity} unit(s) on batch ${data.data.batch.batch_no}. Updated Stock on Hand: ${data.data.batch.new_quantity}`,
+      });
       setMoveForm({ ...moveForm, quantity: 1, reason: "", reference: "" });
       refreshAll();
     } catch (err) {
-      // Prominently display API domain errors (expired batch, insufficient quantity)
-      setErrorMsg(err.message);
+      setAlert({
+        type: "error",
+        title: "Transaction Prohibited by Business Logic",
+        desc: err.message,
+      });
     }
   };
 
+  // Quick action: Select batch for dispensing and open Movements tab
+  const handleQuickDispense = (batchId) => {
+    setMoveForm({
+      ...moveForm,
+      batch_id: batchId,
+      type: "SALE",
+      quantity: 1,
+    });
+    setTab("movements");
+    clearAlert();
+  };
+
+  // Filtered lists
+  const filteredMedicines = medicines.filter(
+    (m) =>
+      m.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.sku?.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const filteredBatches = batches.filter(
+    (b) =>
+      b.batch_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.medicine_name?.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 20,
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0 }}>Pharmacy Inventory Dashboard</h1>
-          <p style={{ margin: "4px 0 0", color: "#4a5568", fontSize: 14 }}>
-            PERN Stack · Medicine, Batch & Stock-Movement Tracking
-          </p>
+    <div className="app-container">
+      {/* Top Navigation & Brand Header */}
+      <header className="navbar">
+        <div className="brand-group">
+          <div className="brand-icon-wrapper">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="brand-title">
+              PharmaFlow
+              <span className="brand-pill">Enterprise Cloud</span>
+            </h1>
+            <p className="brand-desc">
+              Clinical Batch Tracking, Concurrency Control & Real-time Inventory
+            </p>
+          </div>
         </div>
-        <div>
-          <span
-            style={{
-              padding: "6px 12px",
-              borderRadius: 20,
-              fontSize: 13,
-              fontWeight: 600,
-              background: apiReady ? "#c6f6d5" : "#fed7d7",
-              color: apiReady ? "#22543d" : "#9b2c2c",
-            }}
+
+        <div className="header-actions">
+          <button
+            className="btn-refresh"
+            onClick={refreshAll}
+            title="Refresh inventory state"
           >
-            API: {apiReady ? "ONLINE" : "OFFLINE"}
-          </span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                transform: isRefreshing ? "rotate(180deg)" : "none",
+                transition: "transform 0.3s ease",
+              }}
+            >
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+            </svg>
+            Refresh
+          </button>
+
+          <div
+            className={`status-pill ${apiReady ? "online" : "offline"}`}
+            title="Database and API Service Health"
+          >
+            <span className="pulse-dot" />
+            {apiReady ? "API & DB: HEALTHY" : "API: OFFLINE"}
+          </div>
         </div>
       </header>
 
-      {/* Navigation Tabs */}
-      <nav style={{ marginBottom: 20 }}>
+      {/* Segmented Navigation Bar */}
+      <nav className="nav-tabs">
         <button
-          className={tab === "summary" ? "active" : ""}
+          className={`nav-tab-btn ${tab === "summary" ? "active" : ""}`}
           onClick={() => {
-            clearAlerts();
+            clearAlert();
             setTab("summary");
           }}
         >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M3 3v18h18" />
+            <path d="M18 17V9" />
+            <path d="M13 17V5" />
+            <path d="M8 17v-3" />
+          </svg>
           Stock Summary
         </button>
+
         <button
-          className={tab === "medicines" ? "active" : ""}
+          className={`nav-tab-btn ${tab === "medicines" ? "active" : ""}`}
           onClick={() => {
-            clearAlerts();
+            clearAlert();
             setTab("medicines");
           }}
         >
-          Medicines ({medicines.length})
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
+            <path d="m8.5 8.5 7 7" />
+          </svg>
+          Medicines Catalog
+          <span className="tab-badge">{medicines.length}</span>
         </button>
+
         <button
-          className={tab === "batches" ? "active" : ""}
+          className={`nav-tab-btn ${tab === "batches" ? "active" : ""}`}
           onClick={() => {
-            clearAlerts();
+            clearAlert();
             setTab("batches");
           }}
         >
-          Batches ({batches.length})
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+            <path d="m3.3 7 8.7 5 8.7-5M12 22V12" />
+          </svg>
+          Batches & Quarantine
+          <span className="tab-badge">{batches.length}</span>
         </button>
+
         <button
-          className={tab === "movements" ? "active" : ""}
+          className={`nav-tab-btn ${tab === "movements" ? "active" : ""}`}
           onClick={() => {
-            clearAlerts();
+            clearAlert();
             setTab("movements");
           }}
         >
-          Record Movement / History
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M17 3v10M3 13h10M3 7l4-4 4 4M21 17l-4 4-4-4M21 11H11M7 21v-10" />
+          </svg>
+          Record Movement & Audit
         </button>
       </nav>
 
-      {/* Global Alerts */}
-      {errorMsg && (
-        <div className="alert-error" role="alert">
-          <strong>Error: </strong> {errorMsg}
-        </div>
-      )}
-      {successMsg && (
-        <div className="alert-success" role="status">
-          <strong>Success: </strong> {successMsg}
+      {/* Global Alerts & Notifications */}
+      {alert && (
+        <div className={`alert-banner ${alert.type}`} role="alert">
+          <div style={{ marginTop: 2 }}>
+            {alert.type === "error" ? (
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            ) : (
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            )}
+          </div>
+          <div className="alert-content">
+            <h4 className="alert-title">{alert.title}</h4>
+            <p className="alert-desc">{alert.desc}</p>
+          </div>
+          <button
+            className="alert-close"
+            onClick={clearAlert}
+            aria-label="Close notification"
+          >
+            ×
+          </button>
         </div>
       )}
 
-      {/* TAB 1: SUMMARY */}
+      {/* TAB 1: STOCK SUMMARY */}
       {tab === "summary" && summary && (
         <div>
-          <div className="grid">
-            <div className="stat-card">
-              <div style={{ color: "#718096", fontSize: 13 }}>
-                Total Active Stock
+          {/* KPI Stat Cards */}
+          <div className="metrics-grid">
+            <div className="metric-card blue">
+              <div className="metric-header">
+                <span className="metric-label">Active Units on Hand</span>
+                <div className="metric-icon-box">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                  </svg>
+                </div>
               </div>
-              <div className="stat-val">
+              <div className="metric-val">
                 {summary.summary?.activeStock || 0}
               </div>
-            </div>
-            <div className="stat-card danger">
-              <div style={{ color: "#718096", fontSize: 13 }}>
-                Expired Stock (Quarantine)
+              <div className="metric-sub">
+                Verified safe & ready for patient dispensing
               </div>
-              <div className="stat-val" style={{ color: "#c53030" }}>
+            </div>
+
+            <div className="metric-card danger">
+              <div className="metric-header">
+                <span className="metric-label">Quarantine (Expired)</span>
+                <div className="metric-icon-box">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+              </div>
+              <div className="metric-val" style={{ color: "var(--danger)" }}>
                 {summary.summary?.expiredStock || 0}
               </div>
-            </div>
-            <div className="stat-card warning">
-              <div style={{ color: "#718096", fontSize: 13 }}>
-                Low Stock Batches (≤ 10)
+              <div className="metric-sub">
+                Protected by strict rejection constraint (A1)
               </div>
-              <div className="stat-val" style={{ color: "#dd6b20" }}>
+            </div>
+
+            <div className="metric-card warning">
+              <div className="metric-header">
+                <span className="metric-label">Low Stock Batches</span>
+                <div className="metric-icon-box">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+              </div>
+              <div className="metric-val" style={{ color: "var(--warning)" }}>
                 {summary.summary?.lowStockBatches || 0}
               </div>
-            </div>
-            <div className="stat-card">
-              <div style={{ color: "#718096", fontSize: 13 }}>
-                Total Registered Medicines
+              <div className="metric-sub">
+                Batches with ≤ 10 units remaining
               </div>
-              <div className="stat-val">
+            </div>
+
+            <div className="metric-card indigo">
+              <div className="metric-header">
+                <span className="metric-label">Registered SKUs</span>
+                <div className="metric-icon-box">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect width="20" height="14" x="2" y="5" rx="2" />
+                    <line x1="2" y1="10" x2="22" y2="10" />
+                  </svg>
+                </div>
+              </div>
+              <div className="metric-val">
                 {summary.summary?.totalMedicines || 0}
               </div>
+              <div className="metric-sub">Active pharmaceutical formulary</div>
             </div>
           </div>
 
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Stock Overview by Medicine</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Medicine</th>
-                  <th>SKU</th>
-                  <th>Total Stock</th>
-                  <th>Active Stock</th>
-                  <th>Expired Stock</th>
-                  <th>Batches (Active / Total)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.medicines?.map((m) => (
-                  <tr key={m.medicine_id}>
-                    <td>
-                      <strong>{m.medicine_name}</strong>
-                    </td>
-                    <td>
-                      <code>{m.medicine_sku}</code>
-                    </td>
-                    <td>{m.total_quantity}</td>
-                    <td>{m.active_quantity}</td>
-                    <td
-                      style={{
-                        color: m.expired_quantity > 0 ? "#c53030" : "inherit",
-                      }}
-                    >
-                      {m.expired_quantity}
-                    </td>
-                    <td>
-                      {m.active_batches} / {m.total_batches}
-                    </td>
+          {/* Stock Overview Table */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">Stock Overview by Formulary</h3>
+                <p className="card-subtitle">
+                  Aggregated stock levels, active vs quarantined distribution
+                </p>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Medicine Formulation</th>
+                    <th>Product SKU</th>
+                    <th>Total Inventory</th>
+                    <th>Active Units</th>
+                    <th>Quarantine (Expired)</th>
+                    <th>Batch Ratio (Active / Total)</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {summary.medicines?.map((m) => (
+                    <tr key={m.medicine_id}>
+                      <td>
+                        <div style={{ fontWeight: 700 }}>{m.medicine_name}</div>
+                      </td>
+                      <td>
+                        <span className="chip-sku">{m.medicine_sku}</span>
+                      </td>
+                      <td>
+                        <strong>{m.total_quantity}</strong>
+                      </td>
+                      <td>
+                        <span
+                          style={{ color: "var(--success)", fontWeight: 700 }}
+                        >
+                          {m.active_quantity}
+                        </span>
+                      </td>
+                      <td>
+                        {m.expired_quantity > 0 ? (
+                          <span className="badge expired">
+                            {m.expired_quantity} EXPIRED
+                          </span>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)" }}>0</span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            color: "var(--primary-light)",
+                          }}
+                        >
+                          {m.active_batches} / {m.total_batches}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -326,78 +620,152 @@ export default function App() {
       {/* TAB 2: MEDICINES */}
       {tab === "medicines" && (
         <div>
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Register New Medicine</h3>
-            <form onSubmit={handleCreateMedicine}>
-              <div className="form-group">
-                <label>Medicine Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ciprofloxacin 500mg"
-                  value={medForm.name}
-                  onChange={(e) =>
-                    setMedForm({ ...medForm, name: e.target.value })
-                  }
-                />
+          {/* Register New Medicine Card */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">Register New Pharmaceutical Item</h3>
+                <p className="card-subtitle">
+                  Add a new formulation to the clinical catalog with unique SKU
+                </p>
               </div>
-              <div className="form-group">
-                <label>SKU * (Must be Unique)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. MED-CIPRO-500"
-                  value={medForm.sku}
-                  onChange={(e) =>
-                    setMedForm({ ...medForm, sku: e.target.value })
-                  }
-                />
-              </div>
-              <div className="form-group">
-                <label>Description</label>
-                <input
-                  type="text"
-                  placeholder="Clinical notes / dosage form"
-                  value={medForm.description}
-                  onChange={(e) =>
-                    setMedForm({ ...medForm, description: e.target.value })
-                  }
-                />
-              </div>
-              <button type="submit" className="submit-btn">
-                Add Medicine
-              </button>
-            </form>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleCreateMedicine}>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Medicine Full Name *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required
+                      placeholder="e.g. Ciprofloxacin 500mg"
+                      value={medForm.name}
+                      onChange={(e) =>
+                        setMedForm({ ...medForm, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">
+                      Unique Product SKU * (Must be Unique)
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required
+                      placeholder="e.g. MED-CIPRO-500"
+                      value={medForm.sku}
+                      onChange={(e) =>
+                        setMedForm({ ...medForm, sku: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">
+                      Clinical Description / Dosage Notes
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. Broad-spectrum fluoroquinolone antibiotic"
+                      value={medForm.description}
+                      onChange={(e) =>
+                        setMedForm({ ...medForm, description: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="btn-primary">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  Register Medicine
+                </button>
+              </form>
+            </div>
           </div>
 
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Medicines List</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>SKU</th>
-                  <th>Description</th>
-                  <th>Total Quantity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {medicines.map((m) => (
-                  <tr key={m.id}>
-                    <td>{m.id}</td>
-                    <td>
-                      <strong>{m.name}</strong>
-                    </td>
-                    <td>
-                      <code>{m.sku}</code>
-                    </td>
-                    <td>{m.description || "—"}</td>
-                    <td>{m.total_quantity}</td>
+          {/* Medicines Catalog Grid */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">Formulary Catalog</h3>
+                <p className="card-subtitle">
+                  Total {medicines.length} registered pharmaceutical items
+                </p>
+              </div>
+              <div className="search-box">
+                <svg
+                  className="search-icon"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Filter by name or SKU..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Item ID</th>
+                    <th>Formulation Name</th>
+                    <th>Product SKU</th>
+                    <th>Clinical Notes / Description</th>
+                    <th>Total Units in Stock</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredMedicines.map((m) => (
+                    <tr key={m.id}>
+                      <td
+                        style={{
+                          color: "var(--text-muted)",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        #{m.id}
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: 14 }}>{m.name}</strong>
+                      </td>
+                      <td>
+                        <span className="chip-sku">{m.sku}</span>
+                      </td>
+                      <td style={{ color: "#475569" }}>
+                        {m.description || "—"}
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: 14 }}>
+                          {m.total_quantity}
+                        </strong>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -405,110 +773,217 @@ export default function App() {
       {/* TAB 3: BATCHES */}
       {tab === "batches" && (
         <div>
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Create New Batch</h3>
-            <form onSubmit={handleCreateBatch}>
-              <div className="form-group">
-                <label>Medicine *</label>
-                <select
-                  required
-                  value={batchForm.medicine_id}
-                  onChange={(e) =>
-                    setBatchForm({ ...batchForm, medicine_id: e.target.value })
-                  }
-                >
-                  <option value="">-- Select Medicine --</option>
-                  {medicines.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.sku})
-                    </option>
-                  ))}
-                </select>
+          {/* Create Batch Card */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">Receive & Provision New Batch</h3>
+                <p className="card-subtitle">
+                  Assign lot number, expiry date, and initial received stock
+                </p>
               </div>
-              <div className="form-group">
-                <label>Batch Number *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. BATCH-2027A"
-                  value={batchForm.batch_no}
-                  onChange={(e) =>
-                    setBatchForm({ ...batchForm, batch_no: e.target.value })
-                  }
-                />
-              </div>
-              <div className="form-group">
-                <label>Expiry Date *</label>
-                <input
-                  type="date"
-                  required
-                  value={batchForm.expiry_date}
-                  onChange={(e) =>
-                    setBatchForm({ ...batchForm, expiry_date: e.target.value })
-                  }
-                />
-              </div>
-              <div className="form-group">
-                <label>Initial Quantity On Hand</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={batchForm.initial_quantity}
-                  onChange={(e) =>
-                    setBatchForm({
-                      ...batchForm,
-                      initial_quantity: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <button type="submit" className="submit-btn">
-                Create Batch
-              </button>
-            </form>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleCreateBatch}>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">
+                      Associated Formulation *
+                    </label>
+                    <select
+                      className="form-control"
+                      required
+                      value={batchForm.medicine_id}
+                      onChange={(e) =>
+                        setBatchForm({
+                          ...batchForm,
+                          medicine_id: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">
+                        -- Select Medicine Formulation --
+                      </option>
+                      {medicines.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.sku})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">
+                      Batch / Lot Identifier *
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required
+                      placeholder="e.g. AMOX-2027C"
+                      value={batchForm.batch_no}
+                      onChange={(e) =>
+                        setBatchForm({ ...batchForm, batch_no: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Official Expiry Date *</label>
+                    <input
+                      type="date"
+                      className="form-control"
+                      required
+                      value={batchForm.expiry_date}
+                      onChange={(e) =>
+                        setBatchForm({
+                          ...batchForm,
+                          expiry_date: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">
+                      Initial Quantity Received
+                    </label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      min="0"
+                      value={batchForm.initial_quantity}
+                      onChange={(e) =>
+                        setBatchForm({
+                          ...batchForm,
+                          initial_quantity: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="btn-primary">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                    <line x1="12" y1="12" x2="12" y2="22" />
+                  </svg>
+                  Provision Batch
+                </button>
+              </form>
+            </div>
           </div>
 
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>
-              Batches Inventory (Expiry Status Highlighted)
-            </h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Batch No</th>
-                  <th>Medicine</th>
-                  <th>Expiry Date</th>
-                  <th>Quantity</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.map((b) => (
-                  <tr
-                    key={b.id}
-                    style={{ background: b.is_expired ? "#fff5f5" : "inherit" }}
-                  >
-                    <td>
-                      <code>{b.batch_no}</code>
-                    </td>
-                    <td>{b.medicine_name}</td>
-                    <td>{b.expiry_date}</td>
-                    <td>
-                      <strong>{b.quantity_on_hand}</strong>
-                    </td>
-                    <td>
-                      {b.is_expired ? (
-                        <span className="badge-expired">EXPIRED</span>
-                      ) : b.is_low_stock ? (
-                        <span className="badge-low">LOW STOCK</span>
-                      ) : (
-                        <span className="badge-active">ACTIVE</span>
-                      )}
-                    </td>
+          {/* Batches Inventory Table */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">Batches & Expiry Compliance</h3>
+                <p className="card-subtitle">
+                  Real-time stock on hand with automated expiry status tagging
+                </p>
+              </div>
+              <div className="search-box">
+                <svg
+                  className="search-icon"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Filter by batch or formulation..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Batch Lot #</th>
+                    <th>Medicine Formulation</th>
+                    <th>Expiry Date</th>
+                    <th>Available Stock</th>
+                    <th>Compliance Status</th>
+                    <th>Quick Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredBatches.map((b) => (
+                    <tr
+                      key={b.id}
+                      style={{
+                        backgroundColor: b.is_expired
+                          ? "rgba(254, 242, 242, 0.6)"
+                          : "transparent",
+                      }}
+                    >
+                      <td>
+                        <span className="chip-sku">{b.batch_no}</span>
+                      </td>
+                      <td>
+                        <strong>{b.medicine_name}</strong>
+                      </td>
+                      <td style={{ fontFamily: "monospace", fontSize: 13 }}>
+                        {b.expiry_date}
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: 15 }}>
+                          {b.quantity_on_hand}
+                        </strong>{" "}
+                        units
+                      </td>
+                      <td>
+                        {b.is_expired ? (
+                          <span className="badge expired">
+                            ● Quarantined / Expired
+                          </span>
+                        ) : b.is_low_stock ? (
+                          <span className="badge low">
+                            ⚠ Low Stock ({b.quantity_on_hand})
+                          </span>
+                        ) : (
+                          <span className="badge active">● Active Stock</span>
+                        )}
+                      </td>
+                      <td>
+                        {!b.is_expired && b.quantity_on_hand > 0 ? (
+                          <button
+                            className="btn-sm-action"
+                            onClick={() => handleQuickDispense(b.id)}
+                            title="Dispense from this batch"
+                          >
+                            Dispense Sale →
+                          </button>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--danger)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Sale Prohibited
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -516,139 +991,214 @@ export default function App() {
       {/* TAB 4: RECORD MOVEMENTS & HISTORY */}
       {tab === "movements" && (
         <div>
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>
-              Record Stock Movement (Purchase / Sale / Return / Adjustment)
-            </h3>
-            <form onSubmit={handleRecordMovement}>
-              <div className="form-group">
-                <label>Select Batch *</label>
-                <select
-                  required
-                  value={moveForm.batch_id}
-                  onChange={(e) =>
-                    setMoveForm({ ...moveForm, batch_id: e.target.value })
-                  }
-                >
-                  <option value="">-- Choose Batch --</option>
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.batch_no} — {b.medicine_name} (Stock:{" "}
-                      {b.quantity_on_hand}, Exp: {b.expiry_date}
-                      {b.is_expired ? " [EXPIRED]" : ""})
-                    </option>
-                  ))}
-                </select>
+          {/* Record Movement Form Card */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">
+                  Execute Controlled Stock Movement
+                </h3>
+                <p className="card-subtitle">
+                  Atomic transactional movement with serialized row locking
+                  (SELECT ... FOR UPDATE)
+                </p>
               </div>
-              <div className="form-group">
-                <label>Movement Type *</label>
-                <select
-                  value={moveForm.type}
-                  onChange={(e) =>
-                    setMoveForm({ ...moveForm, type: e.target.value })
-                  }
-                >
-                  <option value="SALE">
-                    SALE (Deduct Stock - Validates Expiry & Availability)
-                  </option>
-                  <option value="PURCHASE">PURCHASE (Add Stock)</option>
-                  <option value="RETURN">RETURN (Return to Stock)</option>
-                  <option value="ADJUSTMENT">
-                    ADJUSTMENT (Requires Reason)
-                  </option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Quantity *</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={moveForm.quantity}
-                  onChange={(e) =>
-                    setMoveForm({ ...moveForm, quantity: e.target.value })
-                  }
-                />
-              </div>
-              <div className="form-group">
-                <label>Reference / Prescription #</label>
-                <input
-                  type="text"
-                  placeholder="e.g. RX-2026-0042 or PO-109"
-                  value={moveForm.reference}
-                  onChange={(e) =>
-                    setMoveForm({ ...moveForm, reference: e.target.value })
-                  }
-                />
-              </div>
-              <div className="form-group">
-                <label>
-                  Reason {moveForm.type === "ADJUSTMENT" ? "*" : "(Optional)"}
-                </label>
-                <input
-                  type="text"
-                  required={moveForm.type === "ADJUSTMENT"}
-                  placeholder="Clinical indication / Audit explanation"
-                  value={moveForm.reason}
-                  onChange={(e) =>
-                    setMoveForm({ ...moveForm, reason: e.target.value })
-                  }
-                />
-              </div>
-              <button type="submit" className="submit-btn">
-                Execute Stock Movement
-              </button>
-            </form>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleRecordMovement}>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">
+                      Target Inventory Batch *
+                    </label>
+                    <select
+                      className="form-control"
+                      required
+                      value={moveForm.batch_id}
+                      onChange={(e) =>
+                        setMoveForm({ ...moveForm, batch_id: e.target.value })
+                      }
+                    >
+                      <option value="">-- Choose Target Batch --</option>
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.batch_no} — {b.medicine_name} (Stock:{" "}
+                          {b.quantity_on_hand}, Exp: {b.expiry_date}
+                          {b.is_expired ? " [EXPIRED / QUARANTINE]" : ""})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Movement Type *</label>
+                    <select
+                      className="form-control"
+                      value={moveForm.type}
+                      onChange={(e) =>
+                        setMoveForm({ ...moveForm, type: e.target.value })
+                      }
+                    >
+                      <option value="SALE">
+                        SALE (Deduct Stock — Strictly Validates Expiry &
+                        Quantity)
+                      </option>
+                      <option value="PURCHASE">
+                        PURCHASE (Receive & Increment Stock)
+                      </option>
+                      <option value="RETURN">
+                        RETURN (Customer Return to Active Stock)
+                      </option>
+                      <option value="ADJUSTMENT">
+                        ADJUSTMENT (Audited Inventory Reconciliation)
+                      </option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Quantity (Units) *</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      min="1"
+                      required
+                      value={moveForm.quantity}
+                      onChange={(e) =>
+                        setMoveForm({ ...moveForm, quantity: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      Prescription / PO Reference
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="e.g. RX-2026-9042 or PO-SEED-01"
+                      value={moveForm.reference}
+                      onChange={(e) =>
+                        setMoveForm({ ...moveForm, reference: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div
+                    className="form-group"
+                    style={{ gridColumn: "span 2 / auto" }}
+                  >
+                    <label className="form-label">
+                      Reason / Clinical Justification{" "}
+                      {moveForm.type === "ADJUSTMENT"
+                        ? "(Required for Adjustments)"
+                        : "(Optional)"}
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required={moveForm.type === "ADJUSTMENT"}
+                      placeholder="Dispensing confirmation, audit adjustment reason, or supplier return note"
+                      value={moveForm.reason}
+                      onChange={(e) =>
+                        setMoveForm({ ...moveForm, reason: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" className="btn-primary">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <polyline points="9 11 12 14 22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                  Commit Stock Transaction
+                </button>
+              </form>
+            </div>
           </div>
 
-          <div className="card">
-            <h3 style={{ marginTop: 0 }}>Stock Movement Audit Trail</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Batch</th>
-                  <th>Medicine</th>
-                  <th>Type</th>
-                  <th>Quantity</th>
-                  <th>Reference</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {movements.map((m) => (
-                  <tr key={m.id}>
-                    <td style={{ fontSize: 13, color: "#718096" }}>
-                      {new Date(m.created_at).toLocaleString()}
-                    </td>
-                    <td>
-                      <code>{m.batch_no}</code>
-                    </td>
-                    <td>{m.medicine_name}</td>
-                    <td>
-                      <span
+          {/* Immutable Audit Trail */}
+          <div className="content-card">
+            <div className="card-header-bar">
+              <div>
+                <h3 className="card-title">Immutable Audit Trail</h3>
+                <p className="card-subtitle">
+                  Chronological transaction log of all inventory modifications
+                </p>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Batch Lot</th>
+                    <th>Medicine Formulation</th>
+                    <th>Action</th>
+                    <th>Quantity</th>
+                    <th>Prescription / Ref</th>
+                    <th>Clinical Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map((m) => (
+                    <tr key={m.id}>
+                      <td
                         style={{
-                          fontWeight: "bold",
-                          color:
-                            m.type === "SALE"
-                              ? "#c53030"
-                              : m.type === "PURCHASE"
-                                ? "#2f855a"
-                                : "#2b6cb0",
+                          fontSize: 12,
+                          color: "var(--text-muted)",
+                          fontFamily: "monospace",
                         }}
                       >
-                        {m.type}
-                      </span>
-                    </td>
-                    <td>
-                      <strong>{m.quantity}</strong>
-                    </td>
-                    <td>{m.reference || "—"}</td>
-                    <td>{m.reason || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {new Date(m.created_at).toLocaleString()}
+                      </td>
+                      <td>
+                        <span className="chip-sku">{m.batch_no}</span>
+                      </td>
+                      <td>
+                        <strong>{m.medicine_name}</strong>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            m.type === "SALE"
+                              ? "danger"
+                              : m.type === "PURCHASE"
+                                ? "active"
+                                : "low"
+                          }`}
+                        >
+                          {m.type}
+                        </span>
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: 14 }}>{m.quantity}</strong>
+                      </td>
+                      <td>
+                        <span
+                          style={{
+                            fontFamily: "monospace",
+                            fontSize: 12,
+                            color: "#334155",
+                          }}
+                        >
+                          {m.reference || "—"}
+                        </span>
+                      </td>
+                      <td style={{ color: "#475569" }}>{m.reason || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
