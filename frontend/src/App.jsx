@@ -260,7 +260,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="brand-title">
-              PharmaFlow
+              Nikhil
               <span className="brand-pill">Enterprise Cloud</span>
             </h1>
             <p className="brand-desc">
