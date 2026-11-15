@@ -264,3 +264,42 @@ jobs:
           echo "Web Tags: ${WEB_TAGS}"
           echo "Web Digest: ${WEB_DIGEST}"
           echo "=========================================================="
+
+  # =============================================================
+  # 5. Continuous Deployment (CD): Automated AWS EC2 Rollout
+  # =============================================================
+  deploy-to-ec2:
+    name: Continuous Deployment to AWS EC2
+    needs: [build-scan-and-publish]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+
+    steps:
+      - name: Deploy on AWS EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            echo "=========================================================="
+            echo "Starting Automated EC2 Deployment on $(date)..."
+            echo "=========================================================="
+            cd ~/Pharmacy_inventory || cd Pharmacy_inventory
+
+            echo "Step 1: Pulling latest code from GitHub main..."
+            git pull origin main
+
+            echo "Step 2: Rebuilding & restarting Docker Compose stack..."
+            docker compose -f deploy/docker-compose.yml up -d --build
+
+            echo "Step 3: Pruning dangling Docker images..."
+            docker image prune -f
+
+            echo "Step 4: Verifying service health..."
+            docker compose -f deploy/docker-compose.yml ps
+
+            echo "=========================================================="
+            echo "Deployment completed successfully! Live on public URL."
+            echo "=========================================================="
