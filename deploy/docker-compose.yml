@@ -8,6 +8,8 @@ services:
     image: postgres:16-alpine
     container_name: pharmacy_db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pharmacy_db}
       POSTGRES_USER: ${POSTGRES_USER:-pharmacy_user}
@@ -38,6 +40,10 @@ services:
     image: pharmacy-api:latest
     container_name: pharmacy_api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +78,12 @@ services:
     image: pharmacy-web:latest
     container_name: pharmacy_web
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     depends_on:
       api:
         condition: service_healthy
