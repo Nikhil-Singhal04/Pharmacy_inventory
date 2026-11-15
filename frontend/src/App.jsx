@@ -260,7 +260,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="brand-title">
-              Nikhil
+              PharmaFlow
               <span className="brand-pill">Enterprise Cloud</span>
             </h1>
             <p className="brand-desc">
@@ -1168,13 +1168,12 @@ export default function App() {
                       </td>
                       <td>
                         <span
-                          className={`badge ${
-                            m.type === "SALE"
+                          className={`badge ${m.type === "SALE"
                               ? "danger"
                               : m.type === "PURCHASE"
                                 ? "active"
                                 : "low"
-                          }`}
+                            }`}
                         >
                           {m.type}
                         </span>
